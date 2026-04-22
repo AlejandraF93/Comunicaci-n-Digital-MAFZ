@@ -1,0 +1,74 @@
+#CLIENTE
+import network
+import socket
+import time
+import machine
+
+# Configuración de Hardware
+led_externo = machine.Pin(15, machine.Pin.OUT)
+sensor_temp = machine.ADC(4)
+
+# 1. Preparar la antena del Cliente
+wlan = network.WLAN(network.STA_IF)
+wlan.active(False)
+time.sleep(1)
+wlan.active(True)
+
+# Credenciales (REVISA QUE SEAN EXACTAMENTE IGUALES AL AP)
+SSID_RED = 'WLAN_IoT_UMNG'
+PASS_RED = 'SeguridadUMNG2024!'
+
+print(f"\nBuscando red: {SSID_RED}...")
+
+# 2. Intentar conexión con reintentos
+wlan.connect(SSID_RED, PASS_RED)
+
+intentos = 0
+while not wlan.isconnected() and intentos < 20:
+    led_externo.toggle()
+    print(f"Intento de conexión {intentos+1}...")
+    time.sleep(1)
+    intentos += 1
+
+if wlan.isconnected():
+    print("\n" + "="*30)
+    print("¡CONEXIÓN EXITOSA!")
+    print("IP Asignada:", wlan.ifconfig()[0])
+    print("="*30)
+    led_externo.off()
+else:
+    print("\n[!] FALLO: No se encontró la red o la clave es incorrecta.")
+    # Si falla, vamos a escanear qué redes ve la placa
+    print("Redes que mi antena detecta:")
+    redes = wlan.scan()
+    for r in redes: print("-", r[0].decode())
+    # Detener aquí si falla
+    machine.reset() 
+
+# 3. Dirección del AP (Servidor)
+server_ip = '192.168.4.1'
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+while True:
+    try:
+        # Medir Parámetros
+        rssi = wlan.status('rssi')
+        lectura = sensor_temp.read_u16() * (3.3 / 65535)
+        temp = 27 - (lectura - 0.706)/0.001721
+        
+        # Crear mensaje
+        payload = f"Temp: {temp:.1f}C | RSSI: {rssi}dBm"
+        
+        # ENVIAR AL AP
+        s.sendto(payload.encode(), (server_ip, 8080))
+        print("Enviado al Servidor:", payload)
+        
+        # Parpadeo de éxito
+        led_externo.on()
+        time.sleep(0.1)
+        led_externo.off()
+        
+    except Exception as e:
+        print("Error enviando datos:", e)
+        
+    time.sleep(2)
