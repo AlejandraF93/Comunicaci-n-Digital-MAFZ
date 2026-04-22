@@ -1,0 +1,79 @@
+# AP -SERVIDOR
+import network
+import time
+import machine
+import socket
+
+# Configuración del LED para saber si la red está activa
+led_interno = machine.Pin("LED", machine.Pin.OUT)
+
+# 1. Función para forzar el reinicio de la antena
+def iniciar_ap():
+    ap = network.WLAN(network.AP_IF)
+    
+    print("\n[1/3] Limpiando antena...")
+    ap.active(False)
+    time.sleep(2)
+    
+    print("[2/3] Activando antena...")
+    ap.active(True)
+    time.sleep(2)
+    
+    # 2. Configuración de Red
+    try:
+        # Nota: SSID y Password deben ser exactos a los del cliente
+        ap.config(essid='WLAN_IoT_UMNG', password='SeguridadUMNG2024!')
+        print("[3/3] Configuración aplicada.")
+    except Exception as e:
+        print("Error en configuración:", e)
+
+    # Esperar a que el sistema confirme que está activa
+    intentos = 0
+    while not ap.active() and intentos < 10:
+        print("Esperando señal...")
+        time.sleep(1)
+        intentos += 1
+
+    if ap.active():
+        print("\n" + "="*30)
+        print("--- RED LISTA Y EMITIENDO ---")
+        print("SSID: WLAN_IoT_UMNG")
+        print("IP Servidor:", ap.ifconfig()[0])
+        print("="*30)
+        led_interno.on() # LED prendido = Antena funcionando
+    else:
+        print("Fallo crítico: La antena no enciende.")
+
+# Ejecutar el inicio del AP
+iniciar_ap()
+
+# 3. Configuración del Socket para recibir los datos
+try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Escuchar en todas las interfaces en el puerto 8080
+    s.bind(('', 8080))
+    print("\nEscuchando datos en el puerto 8080...")
+    print("REVISA TU CELULAR: La red debe aparecer ahora.\n")
+except Exception as e:
+    print("Error creando el socket:", e)
+
+# 4. Bucle principal para mostrar los datos en la consola
+while True:
+    try:
+        # El programa se detiene aquí hasta que llega un paquete del aire
+        data, addr = s.recvfrom(1024)
+        
+        # Decodificar el mensaje (temperatura y RSSI)
+        mensaje = data.decode('utf-8', 'ignore')
+        
+        # MOSTRAR EN CONSOLA (Esto es lo que necesitas ver)
+        print(f"DATOS RECIBIDOS de {addr[0]}: {mensaje}")
+        
+        # Feedback visual: el LED parpadea cuando llega un dato
+        led_interno.off()
+        time.sleep(0.1)
+        led_interno.on()
+        
+    except Exception as e:
+        # Si no hay datos, no hace nada y sigue esperando
+        pass
